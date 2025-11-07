@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TAPSI FOOD MAP DASHBOARD</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css?v=1732370800"/>
+</head>
+
+<body>
+  <div class="dashboard-container">
+    <!-- ===== HERO HEADER ===== -->
+    <header class="header" role="banner">
+      <h1>TAPSI FOOD MAP DASHBOARD</h1>
+      <p>BY BUSINESS GROWTH TEAM</p>
+
+      <!-- Auto-refresh status -->
+      <div class="refresh-status" id="refresh-status" aria-live="polite">
+        <span class="refresh-indicator online" id="refresh-indicator" aria-hidden="true">●</span>
+        <span class="refresh-text" id="refresh-text">Auto-refresh active</span>
+      </div>
+    </header>
+
+    <!-- ===== VIEW MODE + TIMELINE ===== -->
+    <section class="view-mode-controls" aria-label="View mode and timeline">
+      <div class="view-mode-toggle">
+        <label class="toggle-label" for="view-live">
+          <span class="toggle-text">View Mode:</span>
+          <div class="toggle-switch" role="tablist" aria-label="Live or Historical">
+            <input type="radio" id="view-live" name="view-mode" value="live" checked />
+            <label for="view-live" class="toggle-option" role="tab" aria-selected="true">Live</label>
+
+            <input type="radio" id="view-historical" name="view-mode" value="historical" />
+            <label for="view-historical" class="toggle-option" role="tab" aria-selected="false">Historical</label>
+          </div>
+        </label>
+      </div>
+
+      <!-- Historical flash -->
+      <div class="historical-flash-notification" id="historical-flash" style="display:none;">
+        <div class="flash-content">
+          <span class="flash-icon" aria-hidden="true">📊</span>
+          <span class="flash-text">Historical mode activated! Use timeline controls below.</span>
+          <button class="flash-dismiss" id="flash-dismiss" title="Dismiss notification" aria-label="Dismiss">×</button>
+        </div>
+      </div>
+
+      <!-- Timeline card -->
+      <div class="timeline-controls" id="timeline-controls" style="display:none;">
+        <div class="timeline-header">
+          <div class="timeline-info">
+            <span class="timeline-label">Historical Timeline:</span>
+            <span class="timeline-timestamp" id="timeline-timestamp">Loading...</span>
+          </div>
+          <button class="timeline-collapse-btn" id="timeline-collapse-btn" title="Collapse/Expand timeline" aria-expanded="true">
+            <span class="collapse-icon" aria-hidden="true">▲</span>
+          </button>
+        </div>
+
+        <div class="timeline-content" id="timeline-content">
+          <div class="timeline-status" role="status">
+            <div class="timeline-details">
+              <span class="timeline-hour-info"><strong>Hour:</strong> <span id="current-hour-idx">-</span>/<span id="total-hours">-</span></span>
+              <span class="timeline-datetime"><strong>Time:</strong> <span id="current-datetime">-</span></span>
+              <span class="timeline-vendor-count"><strong>Vendors:</strong> <span id="current-vendor-count">-</span></span>
+            </div>
+          </div>
+
+          <div class="playback-controls" aria-label="Timeline playback controls">
+            <button class="playback-btn" id="step-backward" title="Step backward 1 hour" aria-label="Step backward">⏮</button>
+            <button class="playback-btn" id="play-pause" title="Play/Pause timeline" aria-label="Play/Pause">▶️</button>
+            <button class="playback-btn" id="step-forward" title="Step forward 1 hour" aria-label="Step forward">⏭</button>
+
+            <div class="playback-speed">
+              <label for="playback-speed-select">Speed:</label>
+              <select id="playback-speed-select" class="speed-select">
+                <option value="500">2x Fast</option>
+                <option value="1000" selected>1x Normal</option>
+                <option value="2000">0.5x Slow</option>
+                <option value="3000">0.33x Very Slow</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="timeline-slider-container">
+            <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="100" value="100" step="1" />
+            <div class="timeline-labels">
+              <span class="timeline-start" id="timeline-start">23:00 Yesterday</span>
+              <span class="timeline-end" id="timeline-end">Now</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TOP FILTERS ROWS ===== -->
+    <section class="filters-top" aria-label="Primary filters">
+      <div class="filter-item">
+        <label for="daterange-start">Date Range Start:</label>
+        <input type="date" id="daterange-start" />
+      </div>
+
+      <div class="filter-item">
+        <label for="daterange-end">Date Range End:</label>
+        <input type="date" id="daterange-end" />
+      </div>
+
+      <div class="filter-item">
+        <label for="city">City:</label>
+        <select id="city"></select>
+      </div>
+
+      <div class="filter-item">
+        <label for="area-main-type">Polygon Display Type:</label>
+        <select id="area-main-type">
+          <option value="tapsifood_marketing_areas">TapsiFood Marketing Areas</option>
+          <option value="tehran_region_districts">Tehran's Region Districts (22)</option>
+          <option value="tehran_main_districts">Tehran's Main Districts (Many)</option>
+          <option value="all_tehran_districts">All Tehran Districts</option>
+          <option value="coverage_grid">Coverage Grid (200m)</option>
+          <option value="none">None (Hide Polygons)</option>
+        </select>
+        <small style="display:block;margin-top:4px;color:var(--text-muted);">
+          For Grid, toggle 'Marketing Areas on Top' in sidebar for context.
+        </small>
+      </div>
+
+      <div class="filter-item filter-item-custom-dropdown">
+        <label for="area-sub-type-filter-button">Polygon Sub Type:</label>
+        <div id="area-sub-type-filter-container" class="custom-checkbox-dropdown">
+          <button type="button" class="dropdown-button" id="area-sub-type-filter-button">Select Sub Types</button>
+          <div class="dropdown-panel" id="area-sub-type-filter-panel"></div>
+        </div>
+      </div>
+
+      <div class="filter-item filter-item-custom-dropdown">
+        <label for="business-line-filter-button">Business Line:</label>
+        <div id="business-line-filter-container" class="custom-checkbox-dropdown">
+          <button type="button" class="dropdown-button" id="business-line-filter-button">Select Business Lines</button>
+          <div class="dropdown-panel" id="business-line-filter-panel"></div>
+        </div>
+      </div>
+
+      <div class="filter-item filter-item-textarea">
+        <label for="vendor-codes-filter">Vendor Codes (comma/newline separated):</label>
+        <textarea id="vendor-codes-filter" rows="3" placeholder="e.g. 2wnok5, 271kr2
+or one per line"></textarea>
+      </div>
+
+      <!-- Lat/Lng + CSV + refresh controls -->
+      <div class="filter-item-group">
+        <div class="filter-item">
+          <label for="lat-finder-input">Find Latitude:</label>
+          <input type="text" id="lat-finder-input" placeholder="e.g. 35.7219" />
+        </div>
+
+        <div class="filter-item">
+          <label for="lng-finder-input">Find Longitude:</label>
+          <input type="text" id="lng-finder-input" placeholder="e.g. 51.3347" />
+        </div>
+
+        <button id="btn-find-location" class="btn-secondary">Show on Map</button>
+
+        <!-- CSV Upload -->
+        <div class="filter-item">
+          <label for="csv-file-input">Upload CSV Markers:</label>
+          <input type="file" id="csv-file-input" accept=".csv" style="display:block;margin-bottom:4px;" />
+          <button id="btn-clear-csv-markers" class="btn-secondary" style="display:none;">Clear CSV Markers</button>
+
+          <div id="csv-marker-controls" style="display:none;margin-top:8px;padding:8px;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:4px;">
+                <label for="csv-marker-color" style="font-size:12px;">Color:</label>
+                <input type="color" id="csv-marker-color" value="#ff9800" style="width:30px;height:25px;border:none;border-radius:3px;cursor:pointer;"/>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <label for="csv-marker-size" style="font-size:12px;">Size:</label>
+                <input type="range" id="csv-marker-size" min="8" max="24" value="14" step="1" style="width:80px;"/>
+                <span id="csv-marker-size-value" style="font-size:12px;min-width:25px;">14px</span>
+              </div>
+              <button id="btn-apply-csv-style" class="btn-secondary" style="font-size:12px;padding:4px 8px;">Apply</button>
+            </div>
+          </div>
+
+          <small style="display:block;margin-top:4px;color:var(--text-muted);">
+            Upload CSV with WKT POINT coordinates. Format: WKT,name,description
+          </small>
+        </div>
+
+        <!-- Auto-refresh mini-controls -->
+        <div class="refresh-controls">
+          <div class="refresh-timer-group">
+            <div class="refresh-timer">
+              <span class="timer-label">Vendors:</span>
+              <span class="timer-value" id="vendor-timer">--:--</span>
+            </div>
+            <button id="vendor-refresh-btn" class="btn-refresh" title="Manually refresh vendor data" aria-label="Refresh vendors">🏪</button>
+          </div>
+
+          <div class="refresh-timer-group">
+            <div class="refresh-timer">
+              <span class="timer-label">Orders:</span>
+              <span class="timer-value" id="order-timer">--:--</span>
+            </div>
+            <button id="order-refresh-btn" class="btn-refresh" title="Manually refresh order data" aria-label="Refresh orders">📋</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="filters-maptype" aria-label="Map layers & heatmaps">
+      <button id="btn-order-density-total">Total Order Density</button>
+      <button id="btn-order-density-organic">Organic Order Density</button>
+      <button id="btn-order-density-non-organic">Non-Organic Order Density</button>
+      <button id="btn-user-density-heatmap">User Density Heatmap</button>
+      <button id="btn-population-heatmap">Population Heatmap</button>
+      <button id="btn-vendors-map">Vendors Map</button>
+      <button id="btn-toggle-vendors" class="btn-toggle">Vendors On</button>
+      <button id="btn-clear-heatmap" class="btn-secondary">Clear Heatmap</button>
+    </nav>
+
+    <!-- ===== MAIN: MAP + SIDEBAR ===== -->
+    <main class="main-content">
+      <div id="map" role="application" aria-label="Interactive city map">
+        <div id="map-loading-overlay-wrapper" class="visible">LOADING ...</div>
+      </div>
+
+      <!-- ===== SIDEBAR as ACCORDIONS ===== -->
+      <aside class="sidebar-filters" aria-label="Sidebar filters">
+        <!-- Group 1: Multi-Platform Vendor Controls -->
+        <details class="accordion" open>
+          <summary>🏪 Multi-Platform Vendor Controls</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="vendor-map-type">Vendor Map Type:</label>
+              <select id="vendor-map-type"></select>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Choose which vendor platform(s) to display on the map
+              </small>
+            </div>
+
+            <div class="filter-item" id="is-express-filter-container" style="display:none;">
+              <label for="is-express">Express (Snappfood):</label>
+              <select id="is-express">
+                <option value="all">All</option>
+                <option value="1">Express Only</option>
+                <option value="0">Non-Express Only</option>
+              </select>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">
+                Filter Snappfood vendors by express delivery availability
+              </small>
+            </div>
+
+            <div class="filter-item" id="is-dual-filter-container">
+              <label for="is-dual">Dual Platform:</label>
+              <select id="is-dual">
+                <option value="all">All Vendors</option>
+                <option value="1">Dual Only (Both Platforms)</option>
+                <option value="0">Single Platform Only</option>
+              </select>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">
+                Filter by vendors present on both platforms vs single platform
+              </small>
+            </div>
+
+            <div class="filter-item" id="delivery-filters-container">
+              <label>Delivery Types (Tapsifood):</label>
+              <div class="delivery-type-controls">
+                <div class="delivery-sub-filter">
+                  <label for="is-own-delivery" class="delivery-label">Own Delivery:</label>
+                  <select id="is-own-delivery" class="delivery-select">
+                    <option value="all">All</option>
+                    <option value="1">Has Own Delivery</option>
+                    <option value="0">No Own Delivery</option>
+                  </select>
+                </div>
+                <div class="delivery-sub-filter">
+                  <label for="is-ofood-delivery" class="delivery-label">oFood Delivery:</label>
+                  <select id="is-ofood-delivery" class="delivery-select">
+                    <option value="all">All</option>
+                    <option value="1">Has oFood Delivery</option>
+                    <option value="0">No oFood Delivery</option>
+                  </select>
+                </div>
+              </div>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Filter Tapsifood vendors by their available delivery methods
+              </small>
+            </div>
+
+            <div class="filter-item" id="availability-filter-container">
+              <label for="availability-filter" class="delivery-label">Availability &gt;= :</label>
+              <input type="number" id="availability-filter" class="availability-input" step="0.01" min="0" max="1" placeholder="e.g. 0.95" value=""/>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Filter vendors by minimum availability ratio (applies to selected vendor map types)
+              </small>
+            </div>
+
+            <div class="filter-item" id="ofood-delivery-rate-filter-container">
+              <label class="delivery-label">oFood Delivery Rate (%):</label>
+              <div class="delivery-rate-controls">
+                <div class="delivery-rate-range">
+                  <input type="number" id="ofood-delivery-rate-min" class="delivery-rate-input" min="0" max="100" placeholder="Min" step="1"/>
+                  <span class="range-separator">to</span>
+                  <input type="number" id="ofood-delivery-rate-max" class="delivery-rate-input" min="0" max="100" placeholder="Max" step="1"/>
+                </div>
+                <button type="button" id="ofood-delivery-rate-clear" class="btn-clear-range">Clear</button>
+              </div>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Filter by oFood delivery rate range (0-100%). Leave empty to include all values including null.
+              </small>
+            </div>
+
+            <div class="filter-item" id="own-delivery-rate-filter-container">
+              <label class="delivery-label">Own Delivery Rate (%):</label>
+              <div class="delivery-rate-controls">
+                <div class="delivery-rate-range">
+                  <input type="number" id="own-delivery-rate-min" class="delivery-rate-input" min="0" max="100" placeholder="Min" step="1"/>
+                  <span class="range-separator">to</span>
+                  <input type="number" id="own-delivery-rate-max" class="delivery-rate-input" min="0" max="100" placeholder="Max" step="1"/>
+                </div>
+                <button type="button" id="own-delivery-rate-clear" class="btn-clear-range">Clear</button>
+              </div>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Filter by own delivery rate range (0-100%). Leave empty to include all values including null.
+              </small>
+            </div>
+          </div>
+        </details>
+
+        <!-- Group 2: Vendor Filters -->
+        <details class="accordion" open>
+          <summary>Vendor Filters</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="vendor-area-main-type">Vendor Spatial Filter:</label>
+              <select id="vendor-area-main-type">
+                <option value="all">All Areas</option>
+                <option value="tapsifood_marketing_areas">TapsiFood Marketing Area</option>
+                <option value="tehran_region_districts">Tehran's Region Districts (22)</option>
+                <option value="tehran_main_districts">Tehran's Main Districts (Many)</option>
+              </select>
+            </div>
+
+            <div class="filter-item filter-item-custom-dropdown">
+              <label for="vendor-area-sub-type-filter-button">Vendor Sub Area:</label>
+              <div id="vendor-area-sub-type-filter-container" class="custom-checkbox-dropdown">
+                <button type="button" class="dropdown-button" id="vendor-area-sub-type-filter-button">Select Sub Areas</button>
+                <div class="dropdown-panel" id="vendor-area-sub-type-filter-panel"></div>
+              </div>
+            </div>
+
+            <hr/>
+
+            <div class="filter-item filter-item-custom-dropdown">
+              <label for="vendor-grade-filter-button">Vendor Grade:</label>
+              <div id="vendor-grade-filter-container" class="custom-checkbox-dropdown">
+                <button type="button" class="dropdown-button" id="vendor-grade-filter-button">Select Grades</button>
+                <div class="dropdown-panel" id="vendor-grade-filter-panel"></div>
+              </div>
+              <div class="filter-item-buttons" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-secondary btn-small" id="vendor-grade-clear-all">Clear All</button>
+                <button type="button" class="btn-secondary btn-small" id="vendor-grade-select-all">Select All</button>
+                <button type="button" class="btn-secondary btn-small" id="vendor-grade-a-c">A-C</button>
+              </div>
+            </div>
+
+            <div class="filter-item filter-item-custom-dropdown">
+              <label for="vendor-status-filter-button">Vendor Status ID:</label>
+              <div id="vendor-status-filter-container" class="custom-checkbox-dropdown">
+                <button type="button" class="dropdown-button" id="vendor-status-filter-button">Select Statuses</button>
+                <div class="dropdown-panel" id="vendor-status-filter-panel"></div>
+              </div>
+              <div class="filter-item-buttons" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-secondary btn-small" id="vendor-status-clear-all">Clear All</button>
+                <button type="button" class="btn-secondary btn-small" id="vendor-status-select-all">Select All</button>
+              </div>
+            </div>
+
+            <div class="filter-item filter-item-custom-dropdown">
+              <label for="vendor-status-text-filter-button">Vendor Status:</label>
+              <div id="vendor-status-text-filter-container" class="custom-checkbox-dropdown">
+                <button type="button" class="dropdown-button" id="vendor-status-text-filter-button">Select Vendor Status</button>
+                <div class="dropdown-panel" id="vendor-status-text-filter-panel"></div>
+              </div>
+              <div class="filter-item-buttons" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-secondary btn-small" id="vendor-status-text-clear-all">Clear All</button>
+                <button type="button" class="btn-secondary btn-small" id="vendor-status-text-select-all">Select All</button>
+              </div>
+            </div>
+
+            <div class="filter-item">
+              <label for="vendor-visible">Vendor Visible:</label>
+              <select id="vendor-visible">
+                <option value="any">Any</option>
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+
+            <div class="filter-item">
+              <label for="vendor-is-open">Vendor is Open:</label>
+              <select id="vendor-is-open">
+                <option value="any">Any</option>
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <!-- Group 3: Vendor Display -->
+        <details class="accordion" open>
+          <summary>Vendor Display</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="vendor-radius-toggle">Vendor Radius:</label>
+              <button id="vendor-radius-toggle" class="btn-toggle">Hide Radius</button>
+            </div>
+
+            <div class="filter-item">
+              <label for="radius-mode-selector">Radius Mode:</label>
+              <select id="radius-mode-selector">
+                <option value="percentage">Percentage</option>
+                <option value="fixed">Fixed Value</option>
+                <option value="grade">Grade-based</option>
+                <option value="grade-dynamic">Grade-based (Dynamic)</option>
+              </select>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">
+                Grade-based: A+ &gt;4km, A/A- =4km, B/B- =3.5km, C/C- =3km, D/D- =2km, E/E- =1.5km, F =1km
+              </small>
+            </div>
+
+            <div class="filter-item" id="radius-percentage-control">
+              <label for="vendor-radius-modifier">Radius Modifier: <span id="radius-modifier-value">100</span>%</label>
+              <input type="range" id="vendor-radius-modifier" min="10" max="100" value="100" step="5"/>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">Adjusts all vendor radii by percentage of original values</small>
+            </div>
+
+            <div class="filter-item" id="radius-fixed-control" style="display:none;">
+              <label for="vendor-radius-fixed">Fixed Radius: <span id="radius-fixed-value">3</span> km</label>
+              <input type="range" id="vendor-radius-fixed" min="0.5" max="10" value="3" step="0.5"/>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">Sets the same radius for all vendors regardless of grade</small>
+            </div>
+
+            <div class="filter-item" id="radius-grade-dynamic-control" style="display:none;">
+              <h5 style="margin:0 0 10px 0;color:var(--primary-color);">Grade-based Radius Settings</h5>
+              <div id="grade-radius-controls"><!-- populated by JS --></div>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">Set custom radius for each vendor grade individually</small>
+            </div>
+
+            <div class="filter-item">
+              <button id="btn-reset-radius" class="btn-secondary" style="width:100%;">Reset Radius</button>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">Resets to original radius values or switches back from grade mode</small>
+            </div>
+
+            <hr/>
+
+            <div class="filter-item">
+              <label for="radius-edge-color">Radius Edge Color:</label>
+              <input type="color" id="radius-edge-color" value="#E57373"/>
+            </div>
+
+            <div class="filter-item">
+              <label for="radius-inner-color">Radius Fill Color:</label>
+              <input type="color" id="radius-inner-color" value="#FFCDD2"/>
+              <input type="checkbox" id="radius-inner-none" title="No inner fill"/>
+              <label for="radius-inner-none" class="checkbox-label">None</label>
+            </div>
+
+            <div class="filter-item">
+              <label for="vendor-marker-size">Marker Size: <span id="marker-size-value">12</span>px</label>
+              <input type="range" id="vendor-marker-size" min="6" max="24" value="12" step="1"/>
+            </div>
+          </div>
+        </details>
+
+        <!-- Group 4: Area Display -->
+        <details class="accordion">
+          <summary>Area Display</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="area-fill-color">Area Fill Color:</label>
+              <input type="color" id="area-fill-color" value="#90CAF9"/>
+              <input type="checkbox" id="area-fill-none" title="No area fill"/>
+              <label for="area-fill-none" class="checkbox-label">None</label>
+            </div>
+
+            <div id="grid-visualization-section" style="display:block;">
+              <hr/>
+              <h4>Coverage Grid Controls (200m)</h4>
+
+              <div class="filter-item">
+                <small style="display:block;margin-bottom:8px;color:var(--text-muted);">
+                  These controls only work when "Coverage Grid (200m)" is selected as Polygon Display Type above.
+                  <strong>NEW:</strong> Works in both Tehran and Mashhad with target-based analysis.
+                </small>
+              </div>
+
+              <div class="filter-item">
+                <label for="grid-blur">Grid Blur: <span id="grid-blur-value">0</span>px</label>
+                <input type="range" id="grid-blur" min="0" max="10" value="0" step="1"/>
+                <small style="display:block;margin-top:2px;color:var(--text-muted);">Adds blur effect to grid points for better visualization</small>
+              </div>
+
+              <div class="filter-item">
+                <label for="grid-fade">Grid Opacity: <span id="grid-fade-value">100</span>%</label>
+                <input type="range" id="grid-fade" min="0" max="100" value="100" step="5"/>
+                <small style="display:block;margin-top:2px;color:var(--text-muted);">Controls transparency of the 200m coverage grid</small>
+              </div>
+
+              <div class="filter-item">
+                <label for="marketing-areas-on-top">Marketing Areas Overlay:</label>
+                <button id="marketing-areas-on-top" class="btn-toggle">Off</button>
+                <small style="display:block;margin-top:4px;color:var(--text-muted);">Shows marketing area boundaries on top of the grid for context</small>
+              </div>
+
+              <div class="filter-item">
+                <label for="grid-point-size">Grid Point Size: <span id="grid-point-size-value">6</span>px</label>
+                <input type="range" id="grid-point-size" min="3" max="12" value="6" step="1"/>
+                <small style="display:block;margin-top:2px;color:var(--text-muted);">Size of individual grid points (coverage circles)</small>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- Group 5: Dynamic Targets -->
+        <details class="accordion">
+          <summary>Dynamic Targets</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="dynamic-targets-button">Set Custom Targets:</label>
+              <button id="dynamic-targets-button" class="btn-secondary" style="width:100%;">Configure Dynamic Targets</button>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Set custom vendor targets for marketing areas based on selected business line and city
+              </small>
+            </div>
+          </div>
+        </details>
+
+        <!-- Group 6: Heatmap Controls -->
+        <details class="accordion">
+          <summary>Heatmap Controls</summary>
+          <div class="accordion-content">
+            <div class="filter-item">
+              <label for="heatmap-auto-optimize">Auto-Optimize:</label>
+              <button id="heatmap-auto-optimize" class="btn-toggle active">Auto-Optimize On</button>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Automatically adjusts heatmap parameters based on zoom level and data distribution for consistent visualization.
+              </small>
+            </div>
+
+            <div class="filter-item">
+              <label for="heatmap-smooth-transitions">Smooth Transitions:</label>
+              <button id="heatmap-smooth-transitions" class="btn-toggle active">Smooth On</button>
+              <small style="display:block;margin-top:4px;color:var(--text-muted);">
+                Enables gradual parameter changes when zooming to prevent dramatic visual shifts.
+              </small>
+            </div>
+
+            <div class="filter-item">
+              <label for="heatmap-reset-params">Reset Parameters:</label>
+              <button id="heatmap-reset-params" class="btn-secondary" style="width:100%;">Reset to Optimal</button>
+            </div>
+
+            <div class="filter-item">
+              <label for="heatmap-radius">Radius (Density): <span id="heatmap-radius-value">25</span></label>
+              <input type="range" id="heatmap-radius" min="5" max="60" value="25" step="1"/>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">Controls heat spread. Auto-adjusts with zoom when optimized.</small>
+            </div>
+
+            <div class="filter-item">
+              <label for="heatmap-blur">Blur: <span id="heatmap-blur-value">15</span></label>
+              <input type="range" id="heatmap-blur" min="1" max="40" value="15" step="1"/>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">Smoothness of transitions. Auto-adjusts based on data density.</small>
+            </div>
+
+            <div class="filter-item">
+              <label for="heatmap-max-val">Max Intensity: <span id="heatmap-max-val-value">1.0</span></label>
+              <input type="range" id="heatmap-max-val" min="0.1" max="3.0" value="1.0" step="0.1"/>
+              <small style="display:block;margin-top:2px;color:var(--text-muted);">Maximum color threshold. Auto-optimized to data distribution.</small>
+            </div>
+          </div>
+        </details>
+      </aside>
+    </main>
+
+    <!-- ===== FOOTER (buttons live here now) ===== -->
+    <footer class="footer">
+      <div class="footer-content">
+        <p>TAPSI FOOD MAP DASHBOARD - MULTI-PLATFORM EDITION</p>
+
+        <div class="footer-actions">
+          <button id="extract-vendors-btn" class="btn-secondary btn-extract-fixed">
+            <span class="extract-icon" aria-hidden="true">📋</span>
+            Extract Visible Vendors
+          </button>
+          <button id="apply-filters-btn" class="btn-primary btn-apply-fixed">Apply All Filters</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ===== Modals ===== -->
+  <div id="dynamic-targets-modal" class="modal" style="display:none;">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="dynamic-targets-title">
+      <div class="modal-header">
+        <h3 id="dynamic-targets-title">Configure Dynamic Targets</h3>
+        <button class="modal-close" id="dynamic-targets-modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-info">
+          <p><strong>City:</strong> <span id="modal-selected-city">-</span></p>
+          <p><strong>Business Line:</strong> <span id="modal-selected-business-line">-</span></p>
+          <small style="color:var(--text-muted);">Set custom vendor targets for each marketing area. Leave empty to use default CSV values.</small>
+        </div>
+
+        <div class="global-target-section">
+          <div class="global-target-item">
+            <label for="global-target-input">Apply to All Marketing Areas:</label>
+            <div class="global-target-controls">
+              <input type="number" id="global-target-input" min="0" placeholder="Enter target for all" class="global-target-input"/>
+              <button type="button" id="apply-global-target" class="btn-primary btn-small">Apply to All</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="dynamic-targets-modal-content"><!-- populated by JS --></div>
+      </div>
+      <div class="modal-footer">
+        <button id="dynamic-targets-reset" class="btn-secondary">Reset to Defaults</button>
+        <button id="dynamic-targets-save" class="btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Scripts ===== -->
+  <script>
+    /* Auto-Refresh Timer System (unchanged IDs) */
+    class AutoRefreshTimerManager {
+      constructor() {
+        this.vendorTimerEl = document.getElementById('vendor-timer');
+        this.orderTimerEl = document.getElementById('order-timer');
+        this.vendorRefreshBtn = document.getElementById('vendor-refresh-btn');
+        this.orderRefreshBtn = document.getElementById('order-refresh-btn');
+        this.refreshIndicatorEl = document.getElementById('refresh-indicator');
+        this.refreshTextEl = document.getElementById('refresh-text');
+
+        this.vendorNextRefresh = null;
+        this.orderNextRefresh = null;
+        this.vendorInterval = 2;
+        this.orderInterval = 300;
+
+        this.timerInterval = null;
+        this.statusInterval = null;
+
+        this.init();
+      }
+      init() {
+        this.setupEventListeners();
+        // Auto-refresh disabled - commenting out timer and status initialization
+        // this.startTimers();
+        // this.fetchInitialStatus();
+        this.setDisabledState();
+      }
+      setupEventListeners() {
+        this.vendorRefreshBtn.addEventListener('click', () => this.triggerManualRefresh('vendor'));
+        this.orderRefreshBtn.addEventListener('click', () => this.triggerManualRefresh('order'));
+      }
+      setDisabledState() {
+        // Set timers to show disabled state
+        this.vendorTimerEl.textContent = 'DISABLED';
+        this.orderTimerEl.textContent = 'DISABLED';
+        this.vendorTimerEl.className = 'timer-value disabled';
+        this.orderTimerEl.className = 'timer-value disabled';
+
+        // Set refresh indicator to show disabled state
+        this.refreshIndicatorEl.className = 'refresh-indicator offline';
+        this.refreshTextEl.textContent = 'Auto-refresh disabled';
+      }
+      async fetchInitialStatus() {
+        try {
+          const response = await fetch('/api/refresh-status');
+          if (response.ok) this.updateFromStatus(await response.json());
+        } catch (e) { console.error('Failed to fetch initial refresh status:', e); }
+      }
+      updateFromStatus(status) {
+        if (!status) return;
+        this.vendorInterval = status.vendor_refresh?.interval_minutes ?? 2;
+        this.orderInterval = status.order_refresh?.interval_minutes ?? 300;
+        const now = new Date();
+
+        if (status.vendor_refresh?.last_refresh) {
+          const last = new Date(status.vendor_refresh.last_refresh);
+          this.vendorNextRefresh = new Date(last.getTime() + this.vendorInterval * 60 * 1000);
+        } else {
+          this.vendorNextRefresh = new Date(now.getTime() + this.vendorInterval * 60 * 1000);
+        }
+        if (status.order_refresh?.last_refresh) {
+          const last = new Date(status.order_refresh.last_refresh);
+          this.orderNextRefresh = new Date(last.getTime() + this.orderInterval * 60 * 1000);
+        } else {
+          this.orderNextRefresh = new Date(now.getTime() + this.orderInterval * 60 * 1000);
+        }
+        if (!status.refresh_enabled) {
+          this.refreshIndicatorEl.className = 'refresh-indicator offline';
+          this.refreshTextEl.textContent = 'Auto-refresh disabled';
+        } else if ((status.vendor_refresh?.error_count ?? 0) > 0 || (status.order_refresh?.error_count ?? 0) > 0) {
+          this.refreshIndicatorEl.className = 'refresh-indicator warning';
+          this.refreshTextEl.textContent = 'Refresh errors detected';
+        } else {
+          this.refreshIndicatorEl.className = 'refresh-indicator online';
+          this.refreshTextEl.textContent = 'Auto-refresh active';
+        }
+      }
+      startTimers() {
+        // Auto-refresh disabled - no timers will be started
+        // this.timerInterval = setInterval(() => this.updateTimerDisplays(), 1000);
+        // this.statusInterval = setInterval(() => this.fetchInitialStatus(), 30000);
+        // this.updateTimerDisplays();
+      }
+      updateTimerDisplays() {
+        const now = new Date();
+        if (this.vendorNextRefresh) {
+          const left = this.vendorNextRefresh - now;
+          if (left > 0) {
+            this.vendorTimerEl.textContent = this.format(left);
+            this.vendorTimerEl.className = 'timer-value';
+          } else {
+            this.vendorTimerEl.textContent = 'Now';
+            this.vendorTimerEl.className = 'timer-value refreshing';
+            this.vendorNextRefresh = new Date(now.getTime() + this.vendorInterval * 60 * 1000);
+          }
+        } else { this.vendorTimerEl.textContent='--:--'; this.vendorTimerEl.className='timer-value'; }
+
+        if (this.orderNextRefresh) {
+          const left = this.orderNextRefresh - now;
+          if (left > 0) {
+            this.orderTimerEl.textContent = this.format(left);
+            this.orderTimerEl.className = 'timer-value';
+          } else {
+            this.orderTimerEl.textContent = 'Now';
+            this.orderTimerEl.className = 'timer-value refreshing';
+            this.orderNextRefresh = new Date(now.getTime() + this.orderInterval * 60 * 1000);
+          }
+        } else { this.orderTimerEl.textContent='--:--'; this.orderTimerEl.className='timer-value'; }
+      }
+      format(ms) {
+        const total = Math.floor(ms/1000), m = Math.floor(total/60), s = total%60;
+        if (m >= 60) { const h = Math.floor(m/60); const rm = m%60; return `${h}h ${rm}m`; }
+        return `${m}:${String(s).padStart(2,'0')}`;
+      }
+      async triggerManualRefresh(type) {
+        const btn = type==='vendor' ? this.vendorRefreshBtn : this.orderRefreshBtn;
+        const original = btn.innerHTML;
+        try {
+          btn.innerHTML = '🔄'; btn.classList.add('refreshing'); btn.disabled = true;
+          const res = await fetch('/api/refresh-now', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type}) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const now = new Date();
+          if (type==='vendor') this.vendorNextRefresh = new Date(now.getTime() + this.vendorInterval*60*1000);
+          else this.orderNextRefresh = new Date(now.getTime() + this.orderInterval*60*1000);
+          btn.innerHTML='✅';
+          setTimeout(()=>{ btn.innerHTML = original; btn.classList.remove('refreshing'); btn.disabled = false; }, 1200);
+          setTimeout(()=> this.fetchInitialStatus(), 800);
+        } catch(e) {
+          console.error(`Manual ${type} refresh failed:`, e);
+          btn.innerHTML = '❌';
+          setTimeout(()=>{ btn.innerHTML = original; btn.classList.remove('refreshing'); btn.disabled = false; }, 1500);
+        }
+      }
+      destroy(){ clearInterval(this.timerInterval); clearInterval(this.statusInterval); }
+    }
+    let timerManager;
+    document.addEventListener('DOMContentLoaded', ()=>{ timerManager = new AutoRefreshTimerManager(); });
+    window.addEventListener('beforeunload', ()=> timerManager?.destroy());
+  </script>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+  <!-- App logic -->
+  <script src="script.js"></script>
+</body>
+</html>
